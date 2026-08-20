@@ -45,7 +45,7 @@ Attention(Q, K, V) = softmax(Q · Kᵀ / √dₖ) · V
   Step 1: 输入 [x₁] → Q₁, K₁, V₁ → 用 Q₁ 去查 K₁, 取 V₁
   Step 2: 输入 [x₁, x₂] → Q₁, Q₂, K₁, K₂, V₁, V₂ → 用 Q₂ 去查 K₁,K₂, 取 V₁,V₂
 
-关键观察:
+观察:
   K₁, V₁ 在 Step 1 和 Step 2 中完全相同（K₁ = x₁ · W_K, V₁ = x₁ · W_V）
   但 Q₁ 在 Step 2 中不需要了——每个 step 只取最后一个位置的 Attention 输出来预测下一个 token
 
@@ -110,12 +110,12 @@ Block 内 token 必须完全一致才能命中
 
 不同注意力机制对 KV-Cache 内存占用的影响：
 
-| 变体 | 全称 | K,V 头数 | 缓存节省 | 代表模型 |
-|------|------|----------|----------|----------|
-| MHA | Multi-Head Attention | h 个 K,V 头 | 基准 | GPT-3, Llama-1 |
-| GQA | Grouped-Query Attention | g 个 K,V 头 (g < h) | ~h/g 倍 | Llama-2/3 (g=8) |
-| MQA | Multi-Query Attention | 1 个 K,V 头 | ~h 倍 | PaLM, Gemini 早期 |
-| **MLA** | **Multi-head Latent Attention** | **低秩压缩 K,V** | **极大减少** | **DeepSeek-V2/V3** |
+| 变体      | 全称                              | K,V 头数            | 缓存节省     | 代表模型               |
+| ------- | ------------------------------- | ----------------- | -------- | ------------------ |
+| MHA     | Multi-Head Attention            | h 个 K,V 头         | 基准       | GPT-3, Llama-1     |
+| GQA     | Grouped-Query Attention         | g 个 K,V 头 (g < h) | ~h/g 倍   | Llama-2/3 (g=8)    |
+| MQA     | Multi-Query Attention           | 1 个 K,V 头         | ~h 倍     | PaLM, Gemini 早期    |
+| **MLA** | **Multi-head Latent Attention** | **低秩压缩 K,V**      | **极大减少** | **DeepSeek-V2/V3** |
 
 MLA 是 DeepSeek-V2/V3 的核心创新：把 KV-Cache 压缩到一个低维潜在空间，推理时再从潜在向量重建 K 和 V。这使得在相同显存下可以服务更长的上下文。
 
@@ -146,16 +146,16 @@ GQA/MQA/MLA 能降低增长曲线的斜率，但斜率永远大于零。现代�
 
 ### 4.1 什么操作会破坏缓存
 
-| 场景 | 是否失效 | 原因 |
-|------|----------|------|
-| 追加新消息到对话 | 部分失效 | 新消息前的 token 仍可命中 |
-| 截断/压缩历史（滑动窗口、摘要） | 大部分失效 | 历史前缀被改写，位置整体前移 |
-| 修改 persona | 完全失效 | 系统提示词第一个 token 就变了 |
-| 新增/删除一个工具 | 部分失效 | 工具 schema 列表变化，从变化点开始失效 |
-| 修改 `cwd` 等工作目录变量 | 部分失效 | 变量值变化导致 section 文本变化 |
-| 更换模型 | 完全失效 | 不同模型的 KV 表示不兼容 |
-| 修改 temperature | 不影响 | 采样参数不影响 KV 计算 |
-| 修改 max_tokens | 不影响 | 只影响生成长度 |
+| 场景               | 是否失效  | 原因                      |
+| ---------------- | ----- | ----------------------- |
+| 追加新消息到对话         | 部分失效  | 新消息前的 token 仍可命中        |
+| 截断/压缩历史（滑动窗口、摘要） | 大部分失效 | 历史前缀被改写，位置整体前移          |
+| 修改 persona       | 完全失效  | 系统提示词第一个 token 就变了      |
+| 新增/删除一个工具        | 部分失效  | 工具 schema 列表变化，从变化点开始失效 |
+| 修改 `cwd` 等工作目录变量 | 部分失效  | 变量值变化导致 section 文本变化    |
+| 更换模型             | 完全失效  | 不同模型的 KV 表示不兼容          |
+| 修改 temperature   | 不影响   | 采样参数不影响 KV 计算           |
+| 修改 max_tokens    | 不影响   | 只影响生成长度                 |
 
 ### 4.2 上下文截断与缓存的冲突
 
@@ -212,12 +212,12 @@ GQA/MQA/MLA 能降低增长曲线的斜率，但斜率永远大于零。现代�
   这根本不是「同一条序列去掉前面」，而是一条全新的序列。
 ```
 
-| 缓解策略 | 做法 | 缓存代价 |
-|----------|------|----------|
-| 检查点式压缩 | 平时严格 append-only；只在逼近窗口上限时一次性压缩 | 每次压缩付一次全量失效，之后多轮重新享受高命中 |
-| 摘要作为新前缀 | 压缩后的 [摘要 + 保留的近期消息] 成为新的稳定前缀 | 把失效成本批量化、低频化 |
+| 缓解策略          | 做法                               | 缓存代价                        |
+| ------------- | -------------------------------- | --------------------------- |
+| 检查点式压缩        | 平时严格 append-only；只在逼近窗口上限时一次性压缩  | 每次压缩付一次全量失效，之后多轮重新享受高命中     |
+| 摘要作为新前缀       | 压缩后的 [摘要 + 保留的近期消息] 成为新的稳定前缀     | 把失效成本批量化、低频化                |
 | 子 Agent 隔离长任务 | 把会产生大量中间结果的子任务下放给子 Agent，主会话保持精简 | 主会话无需压缩；子 Agent 经 fork 继承缓存 |
-| 控制上下文增速 | 限制单次工具输出长度、及时清理大体积中间产物 | 从源头推迟压缩时点 |
+| 控制上下文增速       | 限制单次工具输出长度、及时清理大体积中间产物           | 从源头推迟压缩时点                   |
 
 每一次压缩都等于一次「缓存重置」，下一轮要全价重算 Prefill。理想的节奏是压缩**低频、批量化**——两次压缩之间间隔的轮次越多，缓存的摊销收益越大。逐轮滑动窗口是缓存视角下最差的设计，低频检查点式压缩则好得多。
 
@@ -243,13 +243,13 @@ GQA/MQA/MLA 能降低增长曲线的斜率，但斜率永远大于零。现代�
 
 ---
 
-## 6. Transformer 与 KV-Cache 原理
+## 6. Transformer 与 KV-Cache 原理【可选】
 
 > 前面用直觉解释了 KV-Cache。本章从 Transformer 的计算结构出发，解释为什么 KV-Cache 只需要缓存 K/V、为什么 Prefix Cache 可以跨请求复用，以及「前缀一致 → KV 一致」这条因果链从何而来。
->
+> 
 > 本章只保留理解缓存所必需的知识点。更完整的 Transformer 推理流水线（Encoder/Decoder 架构、Multi-Head Attention 细节、Sampling 策略等）见《Transformer 与 LLM 推理完整闭环》。
 
-### 6.1 从文本到向量
+### 6.1 模型在做什么
 
 LLM 首先通过 Tokenizer 把文本转换为 token ID 序列，再通过 Embedding 矩阵把每个 token ID 映射为高维向量。分词器是**确定性**的——同样的输入永远产生同样的 token 序列，这是缓存命中的前提。
 
@@ -257,9 +257,7 @@ LLM 首先通过 Tokenizer 把文本转换为 token ID 序列，再通过 Embedd
 文本 → Tokenizer → Token IDs → Embedding → 向量表示
 ```
 
-### 6.2 Transformer 层内部结构
-
-每个 Transformer 层包含两个核心子层：**Multi-Head Attention** 和 **FFN（Feed-Forward Network）**。
+拿到向量表示后，进入 Transformer。每个 Transformer 层包含两个核心子层：**Multi-Head Attention** 和 **FFN（Feed-Forward Network）**。
 
 ![diagram_03](assets/diagram_03.png)
 
@@ -277,26 +275,31 @@ LLM 首先通过 Tokenizer 把文本转换为 token ID 序列，再通过 Embedd
 下一层 Hidden States
 ```
 
-要点：
+这里有一个对理解缓存至关重要的认知：**Attention 不直接生成 token。** Attention 的输出不是「苹果」这个词，也不是概率，而是一个新的向量——结合了上下文之后的隐藏表示。它继续经过 FFN 和多层堆叠，最终得到 Final Hidden State。然后取**最后一个位置**的 Hidden State，通过 **LM Head**（线性投影）映射到词表空间，再经 Softmax 转换为概率分布：
 
-1. **残差连接（Residual Connection）：** 每个子层的输出是 `LayerNorm(x + Sublayer(x))`，让梯度可以绕过子层直接传播，使深层网络可训练。
-2. **Attention 负责「信息路由」（token 间的交互），FFN 负责「信息存储」（模型的知识和事实）。** 模型的大部分知识存储在 FFN 的权重中。
+```
+H_last → LM Head → Logits → Softmax → 概率分布（如：苹果 42%, 香蕉 18%, …）
+```
 
-### 6.3 Q、K、V 与 Attention 公式
+> Attention 是「信息交互机制」，不是「最终答案生成器」。LLM 并不是直接「知道答案」，而是通过神经网络计算出一个条件概率分布 $P(x_{t+1} \mid x_1, \dots, x_t)$。
 
-给定输入矩阵 $X$，通过三个不同的线性变换得到：
+### 6.2 Attention 的核心机制
+
+既然 Attention 是信息交互的核心，它具体怎么工作？
+
+给定输入矩阵 $X$，通过三个不同的线性变换得到 Q、K、V：
 
 $$
 Q = XW_Q,\quad K = XW_K,\quad V = XW_V
 $$
 
-| 向量 | 直觉 | 通俗记忆 |
-|------|------|----------|
-| Q（Query） | 我想从上下文中**寻找**什么信息 | 「我想找什么？」 |
-| K（Key） | 我这里**有什么**类型的信息可被匹配 | 「我有什么？」 |
-| V（Value） | 我真正**提供**什么信息 | 「我提供什么？」 |
+| 向量       | 直觉                  | 通俗记忆     |
+| -------- | ------------------- | -------- |
+| Q（Query） | 我想从上下文中**寻找**什么信息   | 「我想找什么？」 |
+| K（Key）   | 我这里**有什么**类型的信息可被匹配 | 「我有什么？」  |
+| V（Value） | 我真正**提供**什么信息       | 「我提供什么？」 |
 
-可以类比成数据库：Q = 查询条件，K = 索引，V = 真正的数据。
+可以类比成数据库：Q = 查询条件，K = 索引，V = 真正的数据。三者来自同一个输入 $X$，但承担完全不同的角色。
 
 Attention 公式：
 
@@ -320,41 +323,19 @@ Softmax       → 把分数变成注意力权重（分配多少信息）
 × V           → 按权重聚合信息（加权求和）
 ```
 
-### 6.4 关键认知：Attention 不直接生成 token
+这个公式就是理解 KV-Cache 的数学基础——注意 K 和 V 在公式中的角色：K 用来和 Q 做匹配计算权重，V 是按权重提取的实际内容。它们的计算只依赖当前 token 的输入 $x_i$，这正是后面「K/V 可以缓存」的根源。
 
-Attention 的输出不是「苹果」这个词，也不是概率，而是一个新的向量——**结合了上下文之后的隐藏表示（Context-aware Hidden Representation）**。它继续经过 FFN 和多层堆叠，最终得到 Final Hidden State。
+### 6.3 自回归生成与 KV-Cache
 
-```
-Attention → 新的 Hidden Representation → FFN → 下一层 → ... → 最终 Hidden State
-```
-
-> Attention 是「信息交互机制」，不是「最终答案生成器」。
-
-### 6.5 Hidden State 如何变成下一个 token
-
-取最后一个位置的 Hidden State，通过 **LM Head**（一个线性投影）映射到词表空间：
-
-$$
-Logits = H_{last} \cdot W_{vocab}
-$$
-
-再通过 Softmax 把 Logits 转换为概率分布：
-
-```
-H_last → LM Head → Logits → Softmax → 概率分布（如：苹果 42%, 香蕉 18%, …）
-```
-
-> LLM 并不是直接「知道答案」，而是通过神经网络计算出一个条件概率分布 $P(x_{t+1} \mid x_1, \dots, x_t)$。
-
-### 6.6 自回归生成与 KV-Cache
-
-**自回归生成：** 每次生成一个 token，追加回上下文，再生成下一个。循环直到输出终止符。
+LLM 的生成是**自回归**的：每次生成一个 token，追加回上下文，再生成下一个，循环直到输出终止符。
 
 ![diagram_05](assets/diagram_05.png)
 
-**Q 为什么每轮重新计算：** 第一轮当前 token 是「吃」→ 计算 $Q_{吃}$，代表「吃这个位置，现在应该关注什么？」→ 预测「苹果」。下一轮当前 token 变成「苹果」→ 需要 $Q_{苹果}$，因为问题变成了「苹果现在应该关注什么？」。Q 是当前查询，每生成一个新 token 就变化，所以必须重算。
+现在把 Attention 机制放进这个循环，就能理解缓存了。
 
-**历史 K/V 为什么可以缓存：** 第一次计算「我 喜欢 吃」时产生 $K_{我}, V_{我}, K_{喜欢}, V_{喜欢}, K_{吃}, V_{吃}$。生成「苹果」后，新序列「我 喜欢 吃 苹果」中「苹果」仍然需要关注历史 token，所以仍需要前面的 K/V。这些历史 K/V 并没有变化——因为 $K_i = x_i \cdot W_K$，$x_i$ 是第 $i$ 个位置的输入，它不会因为后面新增了 token 而改变（Causal Attention 保证每个位置只能看到前面的 token，不能看到后面的）。
+**Q 为什么每轮重新计算？** 第一轮当前 token 是「吃」→ 计算 $Q_{吃}$，代表「吃这个位置，现在应该关注什么？」→ 预测「苹果」。下一轮当前 token 变成「苹果」→ 需要 $Q_{苹果}$，因为问题变成了「苹果现在应该关注什么？」。Q 是当前查询，每生成一个新 token 就变化，必须重算。
+
+**历史 K/V 为什么可以缓存？** 第一次计算「我 喜欢 吃」时产生 $K_{我}, V_{我}, K_{喜欢}, V_{喜欢}, K_{吃}, V_{吃}$。生成「苹果」后，新序列变成「我 喜欢 吃 苹果」。「苹果」仍然需要关注历史 token，所以仍需要前面的 K/V。而这些历史 K/V 并没有变化——因为 $K_i = x_i \cdot W_K$，$x_i$ 是第 $i$ 个位置的输入，它不会因为后面新增了 token 而改变。Causal Attention 保证每个位置只能看到前面的 token，后面的 token 不会影响前面位置的 K/V 计算。
 
 > 历史 K/V 已经计算过 → 直接保存 → 下一轮继续使用。新 token 只计算新的 $Q_{new}, K_{new}, V_{new}$。
 
@@ -376,76 +357,84 @@ H_last → LM Head → Logits → Softmax → 概率分布（如：苹果 42%, �
                 Hidden State → LM Head → Next Token
 ```
 
-### 6.7 Prefill 与 Decode
+这就是 KV-Cache 的完整计算模式。对应到推理引擎的实际执行，分为两个阶段：
 
-**Prefill：** 用户一次性提供 Prompt，模型并行处理整个输入序列，计算各位置的 K/V 并填充 KV Cache。计算密集，GPU 并行处理。
+- **Prefill：** 用户一次性提供 Prompt，模型并行处理整个输入序列，计算各位置的 K/V 并填充 KV Cache。计算密集，GPU 并行处理。
+- **Decode：** 逐 token 生成，每一步用新 token 的 $Q_{new}$ 查询历史 K/V，预测下一个 token。历史 K/V 已在 Cache 中，不需要重算。
 
-**Decode：** 逐 token 生成，每一步用新 token 的 $Q_{new}$ 查询历史 K/V，预测下一个 token。历史 K/V 已在 Cache 中，不需要重算。
+### 6.4 从 KV-Cache 到 Prefix Cache
 
-```
-KV-Cache      提供「可复用的 K/V 数据」（存储）
-Prefix Cache  判断「这次请求能不能复用已有 K/V」（匹配）
-```
-
-### 6.8 KV Cache 与 Prefix Cache 的关系
+理解了 KV-Cache，Prefix Cache 就只是往前再迈一步。
 
 **KV Cache** 解决**同一请求内部**的重复计算——自回归生成时，Step 1 算过的 K/V 在 Step 2、Step 3 继续用，不需要每一步重算整个序列。
 
 **Prefix Cache** 进一步解决**不同请求之间**的复用——如果 Request A 和 Request B 共享相同的前缀（如相同的 System Prompt + Tool Schema + 历史上下文），那么这部分 K/V 可以跨请求复用。
 
-相同 Prefix → 相同 Token 序列 → 相同 Embedding / Position → 相同 Transformer 计算 → 相同历史 K/V → 可以跨请求复用。
+```
+Request A: System Prompt + Tool Schema + 历史上下文 + 用户问题 A
+Request B: System Prompt + Tool Schema + 历史上下文 + 用户问题 B
+                                            ↑
+                                    前面完全一样 → K/V 可复用
+```
 
-这就是 Prefix Cache。它不是孤立的「工程技巧」，而是由 **Transformer 的确定性计算 + Causal Attention 的因果结构 + 自回归生成方式**共同推导出来的计算结果复用机制。前缀一旦变化，变化位置之后的上下文表示变化，后续 K/V 不能继续认为相同，缓存从变化位置之后失效。
+这条复用链路的因果逻辑是：
 
-### 6.9 本章小结
+```
+相同 Prefix → 相同 Token 序列 → 相同 Embedding / Position → 相同 Transformer 计算 → 相同历史 K/V → 可以跨请求复用
+```
 
-1. **Transformer 处理的是向量，不是文字。** $\mathrm{Text} \rightarrow \mathrm{Token} \rightarrow \mathrm{Embedding}$。
-2. **Q/K/V 都来自输入 X。** $Q = XW_Q,\ K = XW_K,\ V = XW_V$。Q 是当前查询，K 是可匹配的信息，V 是实际内容。
-3. **Attention 负责上下文信息交互，不直接产生 token。** Attention Output 是中间表示，继续经过 FFN 和后续层，最终 Hidden State 经 LM Head + Softmax 才得到概率分布。
-4. **Decode 时历史 K/V 会被后续 token 反复使用，因此可以缓存；历史 Q 已经完成当前查询任务，不需要继续使用。**
-5. **Prefix Cache 的本质是确定性计算结果的复用。** 相同前缀 → 相同计算 → 相同 K/V → 可复用；前缀变化 → 上下文变化 → 后续 K/V 变化 → 无法复用。
-6. **Prefix Cache 不是孤立的工程技巧，而是 Transformer 的确定性计算 + Causal Attention 的因果结构 + 自回归生成方式共同推导出来的。**
+反过来，前缀一旦变化，变化位置之后的上下文表示全部变化，后续 K/V 不能继续认为相同，缓存从变化位置之后失效。
+
+> Prefix Cache 不是孤立的「工程技巧」，而是由 **Transformer 的确定性计算 + Causal Attention 的因果结构 + 自回归生成方式**共同推导出来的计算结果复用机制。
+
+### 6.5 本章小结
+
+1. **Transformer 处理的是向量，不是文字。** $\mathrm{Text} \rightarrow \mathrm{Token} \rightarrow \mathrm{Embedding}$。分词器是确定性的，这是缓存命中的前提。
+2. **Attention 负责上下文信息交互，不直接产生 token。** Attention Output 是中间表示，经过 FFN 和多层堆叠后，最终 Hidden State 经 LM Head + Softmax 才得到概率分布。
+3. **Q/K/V 都来自输入 X。** $Q = XW_Q,\ K = XW_K,\ V = XW_V$。Q 是当前查询，每轮变化；K 是可匹配的索引，V 是实际内容，历史 K/V 不随新 token 改变。
+4. **KV-Cache 缓存历史 K/V，每轮只算新 token 的 Q/K/V。** 这是 Causal Attention 的直接推论——后面的 token 不会改变前面位置的 K/V。
+5. **Prefix Cache 是 KV-Cache 的跨请求推广。** 相同前缀 → 相同计算 → 相同 K/V → 可复用。它由 Transformer 的确定性计算 + Causal Attention 的因果结构共同保证。
 
 ---
 
 ## 附录：术语速查
 
-| 术语 | 英文 | 一句话解释 |
-|------|------|------------|
-| Token | Token | 模型处理文本的最小单位 |
-| 分词 | Tokenization | 将文本转换为 token 序列 |
-| 嵌入 | Embedding | 将 token 映射为高维向量 |
-| 自回归 | Autoregressive | 每次生成一个 token，追加到输入再生成下一个 |
-| 注意力 | Attention | 让每个 token 能关注序列中所有 token 的机制 |
-| 因果注意力 | Causal Attention | 每个 token 只能关注它前面的 token，不能「偷看」未来 |
-| Softmax | Softmax | 把任意实数向量映射为总和为 1 的概率分布 |
-| Logits | Logits | LM Head 输出的原始分数，未经 Softmax 转换 |
-| LM Head | LM Head | 语言模型头，将 Hidden State 线性投影到词表空间 |
-| Query (Q) | Query | 「我要找什么」 |
-| Key (K) | Key | 「我是什么」 |
-| Value (V) | Value | 「我包含什么信息」 |
-| KV-Cache | KV-Cache | 缓存 Key 和 Value 向量，避免自回归时重复计算 |
-| 前缀缓存 | Prefix Cache | 跨请求复用相同前缀的 KV-Cache |
-| 缓存命中 | Cache Hit | 新请求的 token 序列在缓存中找到匹配 |
-| 缓存未命中 | Cache Miss | 新请求的 token 序列未找到匹配 |
-| 缓存淘汰 | Eviction | 因空间或时间限制从缓存中移除旧数据 |
-| Transformer | Transformer | 基于 Self-Attention 的神经网络架构 |
-| FFN | Feed-Forward Network | Transformer 中负责信息存储的两层全连接网络 |
-| 残差连接 | Residual Connection | 将子层输入直接加到输出上 |
-| Layer Norm | Layer Normalization | 对每个 token 向量在特征维度上做归一化 |
-| Block | Block | 缓存存储和匹配的基本单位（通常 16 token） |
-| Prefill | Prefill | 推理第一阶段，并行处理输入 token |
-| Decode | Decode | 推理第二阶段，逐个生成输出 token |
-| TTFT | Time To First Token | 从发出请求到收到第一个输出 token 的延迟 |
-| 上下文窗口 | Context Window | 模型一次请求能处理的最大 token 数 |
-| 位置编码 | Positional Encoding | 为 token 注入位置信息（如 RoPE） |
-| RoPE | Rotary Position Embedding | 旋转位置编码，现代主流 LLM 采用 |
-| MHA | Multi-Head Attention | 标准多头注意力 |
-| GQA | Grouped-Query Attention | 分组查询注意力，减少 KV 头数 |
-| MQA | Multi-Query Attention | 多查询注意力，所有查询头共享一对 KV |
-| MLA | Multi-head Latent Attention | DeepSeek 的低秩潜在注意力 |
-| 上下文压缩 | Compaction | 把旧历史摘要为短文本以释放上下文空间 |
-| 缓存命中率 | Cache Hit Rate | cacheReadTokens 占总输入 token 的比例 |
+| 术语          | 英文                          | 一句话解释                            |
+| ----------- | --------------------------- | -------------------------------- |
+| Token       | Token                       | 模型处理文本的最小单位                      |
+| 分词          | Tokenization                | 将文本转换为 token 序列                  |
+| 嵌入          | Embedding                   | 将 token 映射为高维向量                  |
+| 自回归         | Autoregressive              | 每次生成一个 token，追加到输入再生成下一个         |
+| 注意力         | Attention                   | 让每个 token 能关注序列中所有 token 的机制     |
+| 因果注意力       | Causal Attention            | 每个 token 只能关注它前面的 token，不能「偷看」未来 |
+| Softmax     | Softmax                     | 把任意实数向量映射为总和为 1 的概率分布            |
+| Logits      | Logits                      | LM Head 输出的原始分数，未经 Softmax 转换    |
+| LM Head     | LM Head                     | 语言模型头，将 Hidden State 线性投影到词表空间   |
+| Query (Q)   | Query                       | 「我要找什么」                          |
+| Key (K)     | Key                         | 「我是什么」                           |
+| Value (V)   | Value                       | 「我包含什么信息」                        |
+| KV-Cache    | KV-Cache                    | 缓存 Key 和 Value 向量，避免自回归时重复计算     |
+| 前缀缓存        | Prefix Cache                | 跨请求复用相同前缀的 KV-Cache              |
+| 缓存命中        | Cache Hit                   | 新请求的 token 序列在缓存中找到匹配            |
+| 缓存未命中       | Cache Miss                  | 新请求的 token 序列未找到匹配               |
+| 缓存淘汰        | Eviction                    | 因空间或时间限制从缓存中移除旧数据                |
+| Transformer | Transformer                 | 基于 Self-Attention 的神经网络架构        |
+| FFN         | Feed-Forward Network        | Transformer 中负责信息存储的两层全连接网络      |
+| 残差连接        | Residual Connection         | 将子层输入直接加到输出上                     |
+| Layer Norm  | Layer Normalization         | 对每个 token 向量在特征维度上做归一化           |
+| Block       | Block                       | 缓存存储和匹配的基本单位（通常 16 token）        |
+| Prefill     | Prefill                     | 推理第一阶段，并行处理输入 token              |
+| Decode      | Decode                      | 推理第二阶段，逐个生成输出 token              |
+| TTFT        | Time To First Token         | 从发出请求到收到第一个输出 token 的延迟          |
+| 上下文窗口       | Context Window              | 模型一次请求能处理的最大 token 数             |
+| 位置编码        | Positional Encoding         | 为 token 注入位置信息（如 RoPE）           |
+| RoPE        | Rotary Position Embedding   | 旋转位置编码，现代主流 LLM 采用               |
+| MHA         | Multi-Head Attention        | 标准多头注意力                          |
+| GQA         | Grouped-Query Attention     | 分组查询注意力，减少 KV 头数                 |
+| MQA         | Multi-Query Attention       | 多查询注意力，所有查询头共享一对 KV              |
+| MLA         | Multi-head Latent Attention | DeepSeek 的低秩潜在注意力                |
+| 上下文压缩       | Compaction                  | 把旧历史摘要为短文本以释放上下文空间               |
+| 缓存命中率       | Cache Hit Rate              | cacheReadTokens 占总输入 token 的比例   |
 
 ---
 
