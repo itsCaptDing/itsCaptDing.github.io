@@ -5,9 +5,9 @@
 ## 系列文章
 
 1. **[缓存命中机制（上篇）：原理](./01-cache-principles.md)** ✅
-2. 缓存命中机制（中篇）：DSH 架构设计 🔜
+2. **[缓存命中机制（中篇）：DSH 架构设计](./02-dsh-architecture.md)** ✅
 3. 缓存命中机制（下篇）：评估与验证 🔜
-4. [扩展阅读：Transformer 与 LLM 推理完整闭环](./04-transformer-loop.md) 🔜
+4. 扩展阅读：Transformer 与 LLM 推理完整闭环 🔜
 
 ## 适合谁读
 
